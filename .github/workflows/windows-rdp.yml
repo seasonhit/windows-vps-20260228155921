@@ -1,0 +1,39 @@
+name: Windows-VPS-RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Enable RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          
+      - name: Create User
+        run: |
+          net user rdpuser MyPassword123! /add
+          net localgroup administrators rdpuser /add
+          
+      - name: Download and Setup Ngrok
+        run: |
+          Invoke-WebRequest https://bin.equinox.io/c/b342at6LkiX/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+          Expand-Archive ngrok.zip -DestinationPath .
+          .\ngrok.exe authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          
+      - name: Start RDP Tunnel
+        run: |
+          Start-Process powershell -ArgumentList "-NoExit -Command '.\ngrok.exe tcp 3389'"
+          Write-Host "RDP tunnel started! Check ngrok dashboard for connection details."
+          
+      - name: Keep Alive
+        run: |
+          Write-Host "Server is running. Maximum 6 hours."
+          $endTime = (Get-Date).AddHours(6)
+          while ((Get-Date) -lt $endTime) {
+            Start-Sleep -Seconds 300
+            Write-Host "Still running... $(Get-Date)"
+          }
